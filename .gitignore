@@ -1,0 +1,26 @@
+# Environment variables
+.env
+*.env
+!.env.example
+
+# Python
+venv/
+venc/
+.venv/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+dist/
+
+# Large datasets
+data/HaluEval/
+data/RAGTruth/
+data/combined_dataset.jsonl
+data/normalized_ragtruth.jsonl
+data/normalized_halueval.jsonl
+data/splits/train.jsonl
+data/splits/val.jsonl
+data/splits/test.jsonl
+data/synthetic_dataset.jsonl

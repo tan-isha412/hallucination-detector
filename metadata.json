@@ -1,0 +1,8 @@
+{
+  "name": "Hallucination Detector",
+  "description": "A full-stack hallucination detection application with ML scoring pipeline and interactive dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
