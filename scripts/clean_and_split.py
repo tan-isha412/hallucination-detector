@@ -1,46 +1,33 @@
-import pandas as pd
-
-df = pd.read_json("data/combined_dataset.jsonl", lines=True)
-print(df.shape)
-print(df["label"].value_counts())
-print(df["hallucination_type"].value_counts())
-print(df["source_dataset"].value_counts())
-
-before = len(df)
-
-df = df[df["context"].str.strip().str.len() > 0]
-df = df[df["answer"].str.strip().str.len() > 0]
-df = df.drop_duplicates(subset=["context", "answer"])
-df = df[df["context"] != df["answer"]]
-
-print(f"Dropped {before - len(df)} junk rows, {len(df)} remain")
-
-df["group_key"] = df["source_id"].fillna(df["question"]).astype(str)
-from sklearn.model_selection import GroupShuffleSplit
-
-gss = GroupShuffleSplit(n_splits=1, test_size=0.15, random_state=42)
-train_idx, temp_idx = next(gss.split(df, groups=df["group_key"]))
-train_df = df.iloc[train_idx]
-temp_df = df.iloc[temp_idx]
-
-gss2 = GroupShuffleSplit(n_splits=1, test_size=0.5, random_state=42)
-val_idx, test_idx = next(gss2.split(temp_df, groups=temp_df["group_key"]))
-val_df = temp_df.iloc[val_idx]
-test_df = temp_df.iloc[test_idx]
-
-print(len(train_df), len(val_df), len(test_df))
-
-train_groups = set(train_df["group_key"])
-val_groups = set(val_df["group_key"])
-test_groups = set(test_df["group_key"])
-
-print("Train/val overlap:", len(train_groups & val_groups))
-print("Train/test overlap:", len(train_groups & test_groups))
-print("Val/test overlap:", len(val_groups & test_groups))
-
+import json
 import os
-os.makedirs("data/splits", exist_ok=True)
+import random
 
-train_df.to_json("data/splits/train.jsonl", orient="records", lines=True)
-val_df.to_json("data/splits/val.jsonl", orient="records", lines=True)
-test_df.to_json("data/splits/test.jsonl", orient="records", lines=True)
+def clean_and_split(input_path, train_path, val_path, test_path, train_ratio=0.8, val_ratio=0.1):
+    if not os.path.exists(input_path):
+        print(f"File {input_path} not found.")
+        return
+
+    with open(input_path, 'r', encoding='utf-8') as f:
+        data = [json.loads(line) for line in f if line.strip()]
+
+    random.seed(42)
+    random.shuffle(data)
+
+    n_total = len(data)
+    n_train = int(n_total * train_ratio)
+    n_val = int(n_total * val_ratio)
+
+    train_data = data[:n_train]
+    val_data = data[n_train:n_train + n_val]
+    test_data = data[n_train + n_val:]
+
+    for path, split_data in [(train_path, train_data), (val_path, val_data), (test_path, test_data)]:
+        os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as f:
+            for item in split_data:
+                f.write(json.dumps(item) + '\n')
+
+    print(f"Split {n_total} items into {len(train_data)} train, {len(val_data)} val, {len(test_data)} test.")
+
+if __name__ == '__main__':
+    clean_and_split("data/combined.jsonl", "data/train.jsonl", "data/val.jsonl", "data/test.jsonl")

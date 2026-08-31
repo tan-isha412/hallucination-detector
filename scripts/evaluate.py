@@ -1,50 +1,34 @@
+import json
 import os
-import argparse
-import pandas as pd
-import joblib
-from sklearn.metrics import precision_recall_fscore_support, classification_report, confusion_matrix
+import numpy as np
+from sklearn.metrics import classification_report, roc_auc_score, f1_score, accuracy_score
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+def evaluate_model(predictions_file):
+    if not os.path.exists(predictions_file):
+        print(f"Predictions file {predictions_file} not found.")
+        return
 
-FEATURE_COLS = [
-    "embedding_similarity", "entailment_score",
-    "contradiction_score", "neutral_score", "entity_grounding_ratio"
-]
+    y_true = []
+    y_pred = []
+    y_scores = []
 
-def evaluate(model_path, test_path):
-    model = joblib.load(model_path)
-    test_df = pd.read_json(test_path, lines=True)
+    with open(predictions_file, 'r', encoding='utf-8') as f:
+        for line in f:
+            if not line.strip():
+                continue
+            item = json.loads(line)
+            y_true.append(item['label'])
+            score = item.get('trust_score', item.get('score', 0.5))
+            y_scores.append(score)
+            y_pred.append(1 if score >= 0.5 else 0)
 
-    X_test = test_df[FEATURE_COLS]
-    y_test = (test_df["label"] == "hallucinated").astype(int)
-    y_pred = model.predict(X_test)
+    print("Accuracy:", accuracy_score(y_true, y_pred))
+    print("F1-Score:", f1_score(y_true, y_pred, zero_division=0))
+    try:
+        print("ROC-AUC:", roc_auc_score(y_true, y_scores))
+    except Exception:
+        pass
+    print("\nDetailed Report:\n", classification_report(y_true, y_pred, zero_division=0))
 
-    print("\n--- Overall ---")
-    print(classification_report(y_test, y_pred, target_names=["grounded", "hallucinated"]))
-    print(confusion_matrix(y_test, y_pred))
-
-    test_df["pred"] = y_pred
-    test_df["true"] = y_test.values
-
-    print("\n--- By source_dataset ---")
-    for source in test_df["source_dataset"].unique():
-        subset = test_df[test_df["source_dataset"] == source]
-        p, r, f1, _ = precision_recall_fscore_support(
-            subset["true"], subset["pred"], average="binary", zero_division=0
-        )
-        print(f"{source}: P={p:.3f} R={r:.3f} F1={f1:.3f} (n={len(subset)})")
-
-    print("\n--- By hallucination_type (hallucinated rows only) ---")
-    halluc = test_df[test_df["true"] == 1]
-    for htype in halluc["hallucination_type"].unique():
-        rows = halluc[halluc["hallucination_type"] == htype]
-        caught = (rows["pred"] == 1).sum()
-        print(f"{htype}: caught {caught}/{len(rows)} ({caught/len(rows)*100:.1f}%)")
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default=os.path.join(PROJECT_ROOT, "models", "baseline_xgboost.joblib"))
-    parser.add_argument("--test", default=os.path.join(PROJECT_ROOT, "data", "splits", "test_features.jsonl"))
-    args = parser.parse_args()
-    evaluate(args.model, args.test)
+if __name__ == '__main__':
+    evaluate_model("data/test_predictions.jsonl")

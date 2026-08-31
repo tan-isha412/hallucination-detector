@@ -1,23 +1,25 @@
 import json
+import glob
+import os
 
-input_files = [
-    "data/normalized_ragtruth.jsonl",
-    "data/normalized_halueval.jsonl"
-]
-
-output_file = "data/combined_dataset.jsonl"
-
-total_written = 0
-
-with open(output_file, "w", encoding="utf-8") as out:
-    for path in input_files:
-        with open(path, "r", encoding="utf-8") as f:
+def combine_datasets(input_files, output_file):
+    combined = []
+    for filepath in input_files:
+        if not os.path.exists(filepath):
+            continue
+        with open(filepath, 'r', encoding='utf-8') as f:
             for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                out.write(line + "\n")
-                total_written += 1
+                if line.strip():
+                    item = json.loads(line)
+                    combined.append(item)
 
-print(f"Combined dataset written to {output_file}")
-print(f"Total rows: {total_written}")
+    os.makedirs(os.path.dirname(output_file) or '.', exist_ok=True)
+    with open(output_file, 'w', encoding='utf-8') as f:
+        for item in combined:
+            f.write(json.dumps(item) + '\n')
+
+    print(f"Combined {len(combined)} samples into {output_file}")
+
+if __name__ == '__main__':
+    inputs = glob.glob("data/normalized_*.jsonl")
+    combine_datasets(inputs, "data/combined.jsonl")
