@@ -240,6 +240,27 @@ Environment variables can be configured in `.env`:
 
 ---
 
+## Deployment (Render)
+
+This repo includes a `render.yaml` Blueprint that deploys the Node/Express server (which builds and serves the React dashboard as static assets) as a single Render Web Service.
+
+1. Push this repository to GitHub (already done if you're reading this from the repo).
+2. In the [Render Dashboard](https://dashboard.render.com/), click **New > Blueprint** and select this repository. Render will detect `render.yaml` automatically.
+3. Review the generated service (`hallucination-detector`):
+   - **Build Command**: `npm install && npm run build`
+   - **Start Command**: `npm start`
+   - **Health Check Path**: `/health`
+4. Optionally set environment variables on the service:
+   - `PYTHON_SCORER_URL` — point to a separately deployed instance of the Python FastAPI scorer (`services/`) if you want ML-based scoring instead of the built-in JS fallback scorer.
+   - `REDIS_URL` — point to a Redis instance for distributed caching instead of the in-memory cache.
+5. Click **Apply** to create and deploy the service. Render will build and start the app, exposing it on the assigned `*.onrender.com` URL. The dashboard is served at `/`, the scoring API at `/score`, and the health check at `/health`.
+
+To deploy without the Blueprint, create a Node Web Service manually on Render (or any Node host) with the same build/start commands above — the app reads its port from the `PORT` environment variable, which Render sets automatically.
+
+### Deploying the Python scorer (optional)
+
+The Python microservice in `services/` is optional — the Node server falls back to an internal JS-based scorer when `PYTHON_SCORER_URL` is unset. To run the real ML scorer, deploy `services/DockerFile` as a separate Render Web Service (Docker runtime), then set `PYTHON_SCORER_URL` on the main service to that service's `/internal/score` endpoint.
+
 ## License
 
 This project is licensed under the MIT License.

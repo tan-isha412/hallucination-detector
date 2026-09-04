@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: hallucination-detector
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 20.19.0
+      - key: PYTHON_SCORER_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
