@@ -103,6 +103,30 @@ function computeSimilarity(text1, text2) {
   return dot / (Math.sqrt(mag1) * Math.sqrt(mag2));
 }
 
+// Names and numbers are the claims that can be checked word-for-word against the context.
+// Keep this in step with markUp() in dashboard/src/Dashboard.jsx.
+const FACT_RE = /\$?\d+(?:,\d{3})*(?:\.\d+)?[A-Za-z%]*|\b[A-Z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*\b/g;
+const NOT_FACTS = new Set(
+  "The A An In On At And Or But With By For From To Of As It Its This That These Those There They He She We No Not What When Where Which Who How Why Is Are Was Were".split(" ")
+);
+
+function extractFacts(text) {
+  return (text.match(FACT_RE) || []).filter((f) => !NOT_FACTS.has(f));
+}
+
+// Whole-term match, so "24" is not found inside "2024" and "4" is not found inside "$4.2M".
+function appearsIn(term, sourceLower) {
+  const t = term.toLowerCase();
+  const joinsNumber = (ch, next) => /[a-z0-9]/.test(ch || "") || (/[.,]/.test(ch || "") && /\d/.test(next || ""));
+  for (let i = sourceLower.indexOf(t); i !== -1; i = sourceLower.indexOf(t, i + 1)) {
+    const end = i + t.length;
+    if (!joinsNumber(sourceLower[i - 1], sourceLower[i - 2]) && !joinsNumber(sourceLower[end], sourceLower[end + 1])) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function computeFallbackFeatures(question, context, answer) {
   if (!answer || !answer.trim()) {
     return {
@@ -117,12 +141,11 @@ function computeFallbackFeatures(question, context, answer) {
     };
   }
 
-  // Extract facts, proper terms, capitalized words, and numbers from answer
-  const facts = answer.match(/\b[A-Z0-9][a-zA-Z0-9_]*\b|\b\d+(?:\.\d+)?\b/g) || [];
+  const facts = extractFacts(answer);
   let groundingRatio = 1.0;
   if (facts.length > 0) {
     const contextLower = context.toLowerCase();
-    const groundedCount = facts.filter((f) => contextLower.includes(f.toLowerCase())).length;
+    const groundedCount = facts.filter((f) => appearsIn(f, contextLower)).length;
     groundingRatio = groundedCount / facts.length;
   }
 
@@ -152,8 +175,9 @@ function computeFallbackFeatures(question, context, answer) {
 app.post("/score", async (req, res) => {
   const { question, context, answer } = req.body;
 
-  if (!question || !context || !answer) {
-    return res.status(400).json({ error: "question, context, and answer are all required" });
+  // The question is kept for the history list but is not part of the score.
+  if (!context || !answer) {
+    return res.status(400).json({ error: "context and answer are both required" });
   }
 
   const key = cacheKey(context, answer);
@@ -277,10 +301,11 @@ app.get("/health", (req, res) => {
 const dashboardDist = path.join(__dirname, "../dashboard/dist");
 if (fs.existsSync(dashboardDist)) {
   app.use(express.static(dashboardDist));
-  app.get("*", (req, res) => {
-    if (!req.path.startsWith("/score") && !req.path.startsWith("/health") && !req.path.startsWith("/history")) {
-      res.sendFile(path.join(dashboardDist, "index.html"));
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/score") || req.path.startsWith("/health") || req.path.startsWith("/history")) {
+      return next();
     }
+    res.sendFile(path.join(dashboardDist, "index.html"));
   });
 }
 
